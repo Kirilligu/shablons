@@ -25,30 +25,21 @@ def filter_data(data_type, format):
         return Response("Отсутствуют фильтры!", status=400, content_type="text/plain;charset=utf-8")
 
     filters = []
-    for rf in raw_filters:
-        f = filter_dto()
-        f.field_name = rf.get("field_name")
-        value = rf.get("value")
 
-        #преобразование типов
-        if isinstance(value, str) and value.isdigit():
-            value = float(value)
-        f.value = value
-
-        #преобразуем строку к Enum
+    for filter_data in raw_filters:
         try:
-            f.operator = FilterOperator[rf.get("operator").upper()]
-        except KeyError:
-            return Response(f"Неверный оператор фильтра: {rf.get('operator')}", status=400)
-        filters.append(f)
+            #используем фабричный метод
+            filter_obj = filter_dto.create_from_dict(filter_data)
+            filters.append(filter_obj)
+        except Exception as e:
+            return Response(f"Ошибка создания фильтра: {str(e)}", status=400)
     if data_type not in service.data:
         return Response(f"Неправильный тип данных: {data_type}", status=400, content_type="text/plain;charset=utf-8")
 
     data_list = service.data[data_type]
     prot = PrototypeReport(data_list)
-    for f in filters:
-        prot = prot.filter(f)
-
+    for filter_obj in filters:
+        prot = prot.filter(filter_obj)
     #форматы ответа
     content_types = {
         "json": "application/json",
@@ -70,22 +61,18 @@ def filtered_report():
     if not raw_filters:
         return Response("Отсутствуют фильтры!", status=400, content_type="text/plain;charset=utf-8")
     filters = []
-    for rf in raw_filters:
-        f = filter_dto()
-        f.field_name = rf.get("field_name")
-        value = rf.get("value")
-
-        #обработка дат
-        if "date" in f.field_name.lower():
-            from datetime import datetime
-            value = datetime.strptime(value, "%d-%m-%Y")
-        f.value = value
-
+    for filter_data in raw_filters:
         try:
-            f.operator = FilterOperator[rf.get("operator").upper()]
-        except KeyError:
-            return Response(f"Неверный оператор фильтра: {rf.get('operator')}", status=400)
-        filters.append(f)
+            #обработка дат перед созданием фильтра
+            if "date" in filter_data.get("field_name", "").lower():
+                from datetime import datetime
+                filter_data["value"] = datetime.strptime(filter_data["value"], "%d-%m-%Y")
+
+            #используем фабричный метод
+            filter_obj = filter_dto.create_from_dict(filter_data)
+            filters.append(filter_obj)
+        except Exception as e:
+            return Response(f"Ошибка создания фильтра: {str(e)}", status=400)
     osv = service.create_osv_with_filters(filters)
     csv_lines = [f"{item.nomenclature.name}: {item.start_num} -> {item.end_num}" for item in osv.osv_items]
     return Response("\n".join(csv_lines), status=200, content_type="text/plain;charset=utf-8")

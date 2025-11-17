@@ -44,19 +44,33 @@ class Prototype(ABC):
             try:
                 item_value = self.get_field_value(item, filter_obj.field_name)
                 func = filter_obj.get_operator_function()
-                #приводим типы для сравнения
-                if isinstance(item_value, (int, float)) and isinstance(filter_obj.value, str):
+                if filter_obj.operator in [FilterOperator.LESS, FilterOperator.MORE]:
+                    #для меньше и больш - преобразуем в числа
                     try:
+                        item_value = float(item_value)
                         filter_value = float(filter_obj.value)
-                    except ValueError:
+                    except (ValueError, TypeError):
+                        continue
+
+                elif filter_obj.operator == FilterOperator.LIKE:
+                    #для оператора вхождения строки - преобразуем в строки
+                    item_value = str(item_value)
+                    filter_value = str(filter_obj.value)
+
+                elif filter_obj.operator in [FilterOperator.EQUALS, FilterOperator.NOT_EQUALS]:
+                    if isinstance(item_value, (int, float)) and isinstance(filter_obj.value, str):
+                        try:
+                            filter_value = float(filter_obj.value)
+                        except ValueError:
+                            filter_value = filter_obj.value
+                    elif isinstance(item_value, str) and isinstance(filter_obj.value, (int, float)):
+                        item_value = str(item_value)
+                        filter_value = str(filter_obj.value)
+                    else:
                         filter_value = filter_obj.value
+
                 else:
                     filter_value = filter_obj.value
-
-                #преобразуем в строки для LIKE оператора
-                if filter_obj.operator == FilterOperator.LIKE:
-                    item_value = str(item_value)
-                    filter_value = str(filter_value)
                 if func(item_value, filter_value):
                     result.append(item)
             except Exception as e:

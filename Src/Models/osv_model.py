@@ -46,53 +46,42 @@ class osv_model:
     def fill_rows(self, transactions: list):
         """Заполнение ОСВ на основе списка транзакций"""
         validator.validate(transactions, list)
+
         #фильтруем по складу
-        storage_filter = filter_dto()
-        storage_filter.field_name = "storage.id"
-        storage_filter.condition = "EQUALS"
-        storage_filter.value = self.storage.id
+        storage_filter = filter_dto.create_equals_filter("storage.id", self.storage.id)
         prot = PrototypeReport(transactions).filter(storage_filter)
 
         #фильтруем по дате
-        start_filter = filter_dto()
-        start_filter.field_name = "date"
-        start_filter.condition = "LESS"
-        start_filter.value = self.start_date
-        end_filter = filter_dto()
-        end_filter.field_name = "date"
-        end_filter.condition = "MORE"
-        end_filter.value = self.end_date
+        start_filter = filter_dto.create_less_filter("date", self.start_date)
+        end_filter = filter_dto.create_more_filter("date", self.end_date)
         start_prot = prot.filter(start_filter)
         end_prot = prot.filter(end_filter)
 
         #подсчёт ОСВ по номенклатуре
         for item in self.osv_items:
-            nom_filter = filter_dto()
-            nom_filter.field_name = "nomenclature.name"
-            nom_filter.condition = "EQUALS"
-            nom_filter.value = item.nomenclature.name
+            nom_filter = filter_dto.create_equals_filter("nomenclature.name", item.nomenclature.name)
 
             #остатки
             start_items = start_prot.filter(nom_filter)
-            for tr in start_items.items:
-                num = tr.num
+            for tr in start_items.data:
+                num = tr.value
                 if hasattr(tr, "range") and tr.range and tr.range.base_range == item.range:
                     num *= tr.range.coeff if hasattr(tr.range, "coeff") else 1
                 item.start_num += num
 
             #добавления и списания
             end_items = end_prot.filter(nom_filter)
-            for tr in end_items.items:
-                if tr in start_items.items:
+            for tr in end_items.data:
+                if tr in start_items.data:
                     continue
-                num = tr.num
+                num = tr.value
                 if hasattr(tr, "range") and tr.range and tr.range.base_range == item.range:
                     num *= tr.range.coeff if hasattr(tr.range, "coeff") else 1
                 if num > 0:
                     item.addition += num
                 else:
-                    item.substraction += num
-                item.end_num += num + item.start_num
+                    item.substraction += abs(num)
+                item.end_num = item.start_num + item.addition - item.substraction
 
     @staticmethod
     def create(storage: storage_model, start_date: datetime, end_date: datetime, nomenclatures: list):
@@ -112,7 +101,7 @@ class osv_model:
         prot = PrototypeReport(transactions)
         for f in filters:
             prot = prot.filter(f)
-        osv.fill_rows(prot.items)
+        osv.fill_rows(prot.data)
         return osv
 
     def to_dto(self):

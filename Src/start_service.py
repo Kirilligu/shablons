@@ -279,7 +279,7 @@ class start_service:
         for f in filters:
             prot = prot.filter(f)
         #заполняем
-        osv_instance.fill_rows(prot.items)
+        osv_instance.fill_rows(prot.data)
 
         return osv_instance
 

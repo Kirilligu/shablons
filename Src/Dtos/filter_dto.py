@@ -59,3 +59,70 @@ class filter_dto(abstract_dto):
             FilterOperator.NOT_EQUALS: lambda x, y: str(x) != str(y),
         }
         return mapping[self.__operator]
+
+    # Фабричные методы для создания фильтров
+    @staticmethod
+    def create_equals_filter(field_name: str, value) -> "filter_dto":
+        """Создать фильтр полного совпадения"""
+        filter_obj = filter_dto()
+        filter_obj.field_name = field_name
+        filter_obj.value = value
+        filter_obj.operator = FilterOperator.EQUALS
+        return filter_obj
+
+    @staticmethod
+    def create_like_filter(field_name: str, value: str) -> "filter_dto":
+        """Создать фильтр вхождения строки"""
+        filter_obj = filter_dto()
+        filter_obj.field_name = field_name
+        filter_obj.value = value
+        filter_obj.operator = FilterOperator.LIKE
+        return filter_obj
+
+    @staticmethod
+    def create_less_filter(field_name: str, value) -> "filter_dto":
+        """Создать фильтр 'меньше или равно'"""
+        filter_obj = filter_dto()
+        filter_obj.field_name = field_name
+        filter_obj.value = value
+        filter_obj.operator = FilterOperator.LESS
+        return filter_obj
+
+    @staticmethod
+    def create_more_filter(field_name: str, value) -> "filter_dto":
+        """Создать фильтр 'больше или равно'"""
+        filter_obj = filter_dto()
+        filter_obj.field_name = field_name
+        filter_obj.value = value
+        filter_obj.operator = FilterOperator.MORE
+        return filter_obj
+
+    @staticmethod
+    def create_not_equals_filter(field_name: str, value) -> "filter_dto":
+        """Создать фильтр 'не равно'"""
+        filter_obj = filter_dto()
+        filter_obj.field_name = field_name
+        filter_obj.value = value
+        filter_obj.operator = FilterOperator.NOT_EQUALS
+        return filter_obj
+
+    @staticmethod
+    def create_from_dict(data: dict) -> "filter_dto":
+        """Фабричный метод для создания DTO из словаря"""
+        filter_obj = filter_dto()
+        if "field_name" in data:
+            filter_obj.field_name = data["field_name"]
+
+        #значение с преобразованием типов
+        if "value" in data:
+            value = data["value"]
+            if isinstance(value, str):
+                if value.isdigit():
+                    value = int(value)
+                elif value.replace('.', '').isdigit():
+                    value = float(value)
+            filter_obj.value = value
+        #устанавливаем оператор
+        if "operator" in data:
+            filter_obj.operator = data["operator"]
+        return filter_obj
