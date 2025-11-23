@@ -14,7 +14,9 @@ from Src.Dtos.storage_dto import storage_dto
 from Src.Models.storage_model import storage_model
 from Src.Models.transaction_model import transaction_model
 from Src.Dtos.transaction_dto import transaction_dto
-
+from Src.Models.osv_model import osv_model
+from Src.Logics.prototype_report import PrototypeReport
+from Src.Models.osv_model import osv_model
 class start_service:
     # Репозиторий
     __repo: reposity = reposity()
@@ -39,7 +41,7 @@ class start_service:
     def __new__(cls):
         if not hasattr(cls, 'instance'):
             cls.instance = super(start_service, cls).__new__(cls)
-        return cls.instance 
+        return cls.instance
 
     # Текущий файл
     @property
@@ -50,16 +52,16 @@ class start_service:
     @file_name.setter
     def file_name(self, value:str):
         validator.validate(value, str)
-        full_file_name = os.path.abspath(value)        
+        full_file_name = os.path.abspath(value)
         if os.path.exists(full_file_name):
             self.__full_file_name = full_file_name.strip()
         else:
             raise argument_exception(f'Не найден файл настроек {full_file_name}')
 
-    # Информация об ошибке    
+    # Информация об ошибке
     @property
     def error_message(self) -> str:
-        return self.__error_message    
+        return self.__error_message
 
 
     # Загрузить настройки из Json файла
@@ -74,7 +76,7 @@ class start_service:
         except Exception as e:
             self.__error_message = str(e)
             return False
-        
+
     # Сохранить элемент в репозитории
     def __save_item(self, key:str, dto, item):
         validator.validate(key, str)
@@ -82,13 +84,13 @@ class start_service:
         self.__cache.setdefault(dto.id, item)
         self.__repo.data[ key ].append(item)
 
-    # Загрузить единицы измерений   
+    # Загрузить единицы измерений
     def __convert_ranges(self, data: dict) -> bool:
         validator.validate(data, dict)
-        ranges = data['ranges'] if 'ranges' in data else []    
+        ranges = data['ranges'] if 'ranges' in data else []
         if len(ranges) == 0:
             return False
-         
+
         for range in ranges:
             dto = range_dto().create(range)
             item = range_model.from_dto(dto, self.__cache)
@@ -99,57 +101,57 @@ class start_service:
     # Загрузить группы номенклатуры
     def __convert_groups(self, data: dict) -> bool:
         validator.validate(data, dict)
-        categories =  data['categories'] if 'categories' in data else []    
+        categories =  data['categories'] if 'categories' in data else []
         if len(categories) == 0:
             return False
 
         for category in  categories:
-            dto = category_dto().create(category)    
+            dto = category_dto().create(category)
             item = group_model.from_dto(dto, self.__cache )
             self.__save_item( reposity.group_key(), dto, item )
 
         return True
-    
+
     # Загрузить склады
     def __convert_storages(self, data:dict) -> bool:
         validator.validate(data, dict)
-        storages = data['storages'] if 'storages' in data else []    
+        storages = data['storages'] if 'storages' in data else []
         if len(storages) == 0:
             return False
-        
+
         for storage in storages:
             dto = storage_dto().create(storage)
             item = storage_model.from_dto(dto, self.__cache )
             self.__save_item( reposity.storage_key(), dto, item )
 
-        return True    
+        return True
 
     # Загрузить тестовые транзакции
     def __convert_transactions(self, data:list) -> bool:
         validator.validate(data, list)
         if len(data) == 0:
             return False
-        
+
         for transaction in data:
             dto = transaction_dto().create(transaction)
             item = transaction_model.from_dto(dto, self.__cache )
             self.__save_item( reposity.transaction_key(), dto, item )
 
-        return True    
+        return True
 
     # Загрузить номенклатуру
     def __convert_nomenclatures(   self, data: dict) -> bool:
-        validator.validate(data, dict)      
-        nomenclatures = data['nomenclatures'] if 'nomenclatures' in data else []   
+        validator.validate(data, dict)
+        nomenclatures = data['nomenclatures'] if 'nomenclatures' in data else []
         if len(nomenclatures) == 0:
             return False
-         
+
         for nomenclature in nomenclatures:
             dto = nomenclature_dto().create(nomenclature)
             item = nomenclature_model.from_dto(dto, self.__cache)
             self.__save_item( reposity.nomenclature_key(), dto, item )
 
-        return True        
+        return True
 
     # Обработать справочники
     def __convert_references(self, data:dict) -> bool:
@@ -158,17 +160,17 @@ class start_service:
         try:
             self.__convert_ranges(data)
             self.__convert_groups(data)
-            self.__convert_nomenclatures(data) 
-            self.__convert_storages(data)       
+            self.__convert_nomenclatures(data)
+            self.__convert_storages(data)
             return True
         except Exception as e:
             self.__error_message = str(e)
             return False
 
-    # Обработать рецепт по умолчанию    
+    # Обработать рецепт по умолчанию
     def __convert_receipt(self, data:dict) -> bool:
         validator.validate(data, dict)
-        
+
         try:
             # 1 Созданим рецепт
             cooking_time = data['cooking_time'] if 'cooking_time' in data else ""
@@ -183,7 +185,7 @@ class start_service:
                     self.__default_receipt.steps.append( step )
 
             # Собираем рецепт
-            compositions =  data['composition'] if 'composition' in data else []      
+            compositions =  data['composition'] if 'composition' in data else []
             for composition in compositions:
                 # TODO: Заменить код через Dto
                 namnomenclature_id = composition['nomenclature_id'] if 'nomenclature_id' in composition else ""
@@ -193,16 +195,16 @@ class start_service:
                 range = self.__cache[range_id] if range_id in self.__cache else None
                 item = receipt_item_model.create(  nomenclature, range, value)
                 self.__default_receipt.composition.append(item)
-                
+
             # Сохраняем рецепт
             self.__repo.data[ reposity.receipt_key() ].append(self.__default_receipt)
             return True
         except Exception as e:
             self.__error_message = str(e)
             return False
-            
 
-    # Обработать полученный словарь    
+
+    # Обработать полученный словарь
     def convert(self, data: dict) -> bool:
         validator.validate(data, dict)
         loaded_references = True
@@ -217,12 +219,12 @@ class start_service:
         # Обработать рецепт
         if "default_receipt" in data.keys():
                 default_receipt = data["default_receipt"]
-                loaded_receipt = self.__convert_receipt(default_receipt)  
+                loaded_receipt = self.__convert_receipt(default_receipt)
 
         # Загрузить транзакции
         if "default_transactions" in data.keys():
                 default_transactions = data["default_transactions"]
-                loaded_transactions = self.__convert_transactions(default_transactions)             
+                loaded_transactions = self.__convert_transactions(default_transactions)
 
         return loaded_references and loaded_receipt and loaded_transactions
 
@@ -231,7 +233,7 @@ class start_service:
     """
     @property
     def data(self):
-        return self.__repo.data   
+        return self.__repo.data
 
     """
     Основной метод для генерации эталонных данных
@@ -240,6 +242,45 @@ class start_service:
         self.file_name = "settings.json"
         result = self.load()
         if result == False:
-            raise operation_exception(f"Невозможно сформировать стартовый набор данных!\nОписание: {self.error_message}") 
-        
+            raise operation_exception(f"Невозможно сформировать стартовый набор данных!\nОписание: {self.error_message}")
+
+    """
+    Создание ОСВ
+    """
+    def create_osv(self, start, end, storage_id):
+        transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        storage = self.__cache.get(storage_id, None)
+        validator.validate(storage, storage_model)
+        osv_instance = osv_model()
+        osv_instance.storage = storage
+        osv_instance.start_date = start
+        osv_instance.end_date = end
+        osv_instance.fill_empty_osv(nomenclatures)
+
+        #заполняем строки ОСВ всеми транзакциями
+        osv_instance.fill_rows(transactions)
+        return osv_instance
+
+    """
+    Создание ОСВ с использованием фильтров DTO
+    """
+    def create_osv_with_filters(self, filters: list):
+        """
+        filters: список объектов filter_dto
+        """
+        transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        #создаем пустую модель ОСВ
+        osv_instance = osv_model()
+        osv_instance.fill_empty_osv(nomenclatures)
+        #фильтруем транзакции через PrototypeReport
+        prot = PrototypeReport(transactions)
+        for f in filters:
+            prot = prot.filter(f)
+        #заполняем
+        osv_instance.fill_rows(prot.data)
+
+        return osv_instance
+
 
