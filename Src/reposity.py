@@ -34,10 +34,11 @@ class reposity:
         
     """
     Ключ для транзакций
-    """    
+    """
+
+    @staticmethod
     def transaction_key():
         return "transaction_key"    
-    
 
     """
     Ключ для номенклатуры

@@ -5,6 +5,7 @@ from Src.Models.nomenclature_model import nomenclature_model
 from Src.Core.validator import validator, argument_exception, operation_exception
 import os
 import json
+from datetime import datetime
 from Src.Models.receipt_model import receipt_model
 from Src.Models.receipt_item_model import receipt_item_model
 from Src.Dtos.nomenclature_dto import nomenclature_dto
@@ -70,7 +71,7 @@ class start_service:
             raise operation_exception("Не найден файл настроек!")
 
         try:
-            with open( self.__full_file_name, 'r') as file_instance:
+            with open(self.__full_file_name, 'r', encoding='utf-8') as file_instance:
                 settings = json.load(file_instance)
                 return self.convert(settings)
         except Exception as e:
@@ -84,6 +85,73 @@ class start_service:
         self.__cache.setdefault(dto.id, item)
         self.__repo.data[ key ].append(item)
 
+    def calculate_balances(self, target_date: str):
+        """
+        Рассчитать остатки на заданную дату с учетом даты блокировки
+        """
+        validator.validate(target_date, str)
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        #получаем дату блокировки
+        block_period_str = self.__repo.settings.block_period if hasattr(self.__repo.settings,
+                                                                        'block_period') else "1900-01-01"
+        block_dt = datetime.strptime(block_period_str, "%Y-%m-%d")
+
+        # берем сохраненные обороты до даты блокировки
+        if "turnover_until_block" in self.__cache:
+            osv_before_block = self.__cache["turnover_until_block"]
+        else:
+            osv_before_block = self.calculate_turnover_until_block()
+
+        # берем транзакции после даты блокировки до target_date
+        transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        transactions_after_block = [
+            t for t in transactions if block_dt < t.period <= target_dt
+        ]
+        osv_after_block = osv_model()
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        osv_after_block.fill_empty_osv(nomenclatures)
+        osv_after_block.fill_rows(transactions_after_block)
+
+        #объединяем строки ОСВ до блокировки и после блокировки
+        combined_osv = osv_model()
+        combined_osv.fill_empty_osv(nomenclatures)
+
+        #используем словарь для группировки по номенклатуре
+        temp_dict = {}
+        for item in osv_before_block.osv_items + osv_after_block.osv_items:
+            key = item.nomenclature.unique_code
+            if key not in temp_dict:
+                temp_dict[key] = item
+            else:
+                temp_dict[key].start_num += item.start_num
+                temp_dict[key].end_num += item.end_num
+
+        combined_osv.osv_items = list(temp_dict.values())
+        return combined_osv
+
+    def calculate_turnover_until_block(self):
+        """
+        Рассчет оборотов за период с 1900-01-01 до даты блокировки
+        """
+        transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        block_period_str = self.__repo.settings.block_period if hasattr(self.__repo.settings,
+                                                                        'block_period') else "1900-01-01"
+        block_period = datetime.strptime(block_period_str, "%Y-%m-%d")
+
+        #фильтруем транзакции до даты блокировки
+        transactions_before_block = [
+            t for t in transactions if t.period <= block_period
+        ]
+
+        #создаем ОСВ для этого периода
+        turnover_osv = osv_model()
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        turnover_osv.fill_empty_osv(nomenclatures)
+        turnover_osv.fill_rows(transactions_before_block)
+
+        #сохраняем результат в кэш
+        self.__cache["turnover_until_block"] = turnover_osv
+        return turnover_osv
     # Загрузить единицы измерений
     def __convert_ranges(self, data: dict) -> bool:
         validator.validate(data, dict)
