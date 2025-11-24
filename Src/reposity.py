@@ -5,6 +5,7 @@ from Src.Core.common import common
 """
 class reposity:
     __data = {}
+    __settings = None
 
     @property
     def data(self):

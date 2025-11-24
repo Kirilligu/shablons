@@ -7,7 +7,16 @@ from Src.Models.nomenclature_model import nomenclature_model
 from Src.Models.storage_model import storage_model
 
 class TestBalancesWithBlockDate(unittest.TestCase):
+    """
+    Тестовый класс для проверки корректности расчета остатков с учетом даты блокировки
+    Методы:
+        1.test_balances_stability_with_block_date_change: проверяет, что конечные остатки не меняются
+          при изменении даты блокировки
+        2.test_combined_turnover_calculation: проверяет правильность объединения оборотов до и после
+          даты блокировки, и что все номенклатуры присутствуют в расчете
+    """
     def setUp(self):
+        """Настройка перед каждым тестом"""
         self.service = start_service()
         self.service.start()
 
