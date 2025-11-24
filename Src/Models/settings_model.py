@@ -32,4 +32,15 @@ class settings_model:
         
         self.__default_response_format = value
 
+    # Дата блокировки
+    __block_period:str = "1900-01-01"
+    @property
+    def block_period(self) -> str:
+        return self.__block_period
 
+    @block_period.setter
+    def block_period(self, value:str):
+        from datetime import datetime
+        validator.validate(value, str)
+        datetime.strptime(value, "%Y-%m-%d")
+        self.__block_period = value

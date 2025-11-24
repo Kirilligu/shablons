@@ -5,6 +5,7 @@ from Src.Core.common import common
 """
 class reposity:
     __data = {}
+    __settings = None
 
     @property
     def data(self):
@@ -34,10 +35,11 @@ class reposity:
         
     """
     Ключ для транзакций
-    """    
+    """
+
+    @staticmethod
     def transaction_key():
         return "transaction_key"    
-    
 
     """
     Ключ для номенклатуры

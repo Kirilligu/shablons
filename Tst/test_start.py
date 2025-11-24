@@ -31,8 +31,8 @@ class test_start(unittest.TestCase):
         start.start()
 
         # Проверка
-        gramm =  list(filter(lambda x: x.name == "Грамм", start.data[ reposity.range_key()])) 
-        kg =  list(filter(lambda x: x.name == "Киллограмм", start.data[ reposity.range_key()])) 
+        gramm =  list(filter(lambda x: x.name == "Грамм", start.data[ reposity.range_key()]))
+        kg =  list(filter(lambda x: x.name == "Киллограмм", start.data[ reposity.range_key()]))
         assert gramm[0].unique_code == kg[0].base.unique_code
 
 
@@ -42,19 +42,19 @@ class test_start(unittest.TestCase):
 
         # Действие
         result = reposity.keys()
-        
+
         # Проверка
         assert len(result) > 0
 
-    # Проверить метод initalize класса reposity 
-    def test_notThrow_reposity_initialize(self):   
+    # Проверить метод initalize класса reposity
+    def test_notThrow_reposity_initialize(self):
         # Подготовка
         repo = reposity()
 
         # Действие
-        repo.initalize() 
+        repo.initalize()
 
 
-          
+
 if __name__ == '__main__':
-    unittest.main()  
+    unittest.main()

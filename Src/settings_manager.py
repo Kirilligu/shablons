@@ -53,21 +53,23 @@ class settings_manager:
             raise operation_exception("Не найден файл настроек!")
 
         try:
-            with open( self.__full_file_name, 'r') as file_instance:
+            with open(self.__full_file_name, 'r', encoding='utf-8') as file_instance:
                 settings = json.load(file_instance)
+
+                result = False  # добавим инициализацию
 
                 if "company" in settings.keys():
                     data = settings["company"]
                     result = self.convert(data)
-                
+
                 if "default_format" in settings.keys() and result == True:
                     data = settings["default_format"]
                     if data in response_formats.list_all_formats():
                         self.settings.default_response_format = data
 
                 return result
-            return False
-        except:
+        except Exception as e:
+            print(f"Ошибка загрузки настроек: {str(e)}")
             return False
         
     # Обработать полученный словарь    

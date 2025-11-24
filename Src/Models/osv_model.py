@@ -48,7 +48,7 @@ class osv_model:
         validator.validate(transactions, list)
 
         #фильтруем по складу
-        storage_filter = filter_dto.create_equals_filter("storage.id", self.storage.id)
+        storage_filter = filter_dto.create_equals_filter("storage.unique_code", self.storage.unique_code)
         prot = PrototypeReport(transactions).filter(storage_filter)
 
         #фильтруем по дате

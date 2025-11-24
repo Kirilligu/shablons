@@ -5,6 +5,7 @@ from Src.Models.nomenclature_model import nomenclature_model
 from Src.Core.validator import validator, argument_exception, operation_exception
 import os
 import json
+from datetime import datetime
 from Src.Models.receipt_model import receipt_model
 from Src.Models.receipt_item_model import receipt_item_model
 from Src.Dtos.nomenclature_dto import nomenclature_dto
@@ -17,6 +18,9 @@ from Src.Dtos.transaction_dto import transaction_dto
 from Src.Models.osv_model import osv_model
 from Src.Logics.prototype_report import PrototypeReport
 from Src.Models.osv_model import osv_model
+from Src.Dtos.filter_dto import filter_dto, FilterOperator
+from Src.settings_manager import settings_manager
+
 class start_service:
     # Репозиторий
     __repo: reposity = reposity()
@@ -27,7 +31,8 @@ class start_service:
     # Словарь который содержит загруженные и инициализованные инстансы нужных объектов
     # Ключ - id записи, значение - abstract_model
     __cache = {}
-
+    _cached_turnover_before_block: osv_model = None
+    _cached_block_date: datetime = None
     # Наименование файла (полный путь)
     __full_file_name:str = ""
 
@@ -36,6 +41,7 @@ class start_service:
 
     def __init__(self):
         self.__repo.initalize()
+        self.load_settings()
 
     # Singletone
     def __new__(cls):
@@ -70,7 +76,7 @@ class start_service:
             raise operation_exception("Не найден файл настроек!")
 
         try:
-            with open( self.__full_file_name, 'r') as file_instance:
+            with open(self.__full_file_name, 'r', encoding='utf-8') as file_instance:
                 settings = json.load(file_instance)
                 return self.convert(settings)
         except Exception as e:
@@ -83,6 +89,88 @@ class start_service:
         item.unique_code = dto.id
         self.__cache.setdefault(dto.id, item)
         self.__repo.data[ key ].append(item)
+
+    def calculate_balances(self, target_date: str):
+        """
+        Рассчитать остатки на заданную дату с учетом даты блокировки
+        """
+        validator.validate(target_date, str)
+        target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+        #получаем дату блокировки
+        block_period_str = self.__repo.settings.block_period if hasattr(self.__repo.settings,
+                                                                        'block_period') else "1900-01-01"
+        block_dt = datetime.strptime(block_period_str, "%Y-%m-%d")
+
+        # берем сохраненные обороты до даты блокировки
+        if "turnover_until_block" in self.__cache:
+            osv_before_block = self.__cache["turnover_until_block"]
+        else:
+            osv_before_block = self.calculate_turnover_until_block()
+
+        # берем транзакции после даты блокировки до target_date
+        transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        # Фильтрация транзакций через PrototypeReport
+        report = PrototypeReport(transactions)
+
+        filter_from = filter_dto.create_more_filter("period", block_dt)
+        filter_to = filter_dto.create_less_filter("period", target_dt)
+
+        transactions_after_block = (
+            report
+                .filter(filter_from)
+                .filter(filter_to)
+                .data
+        )
+        osv_after_block = osv_model()
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        osv_after_block.fill_empty_osv(nomenclatures)
+        osv_after_block.fill_rows(transactions_after_block)
+
+        #объединяем строки ОСВ до блокировки и после блокировки
+        combined_osv = osv_model()
+        combined_osv.fill_empty_osv(nomenclatures)
+
+        #используем словарь для группировки по номенклатуре
+        temp_dict = {}
+        for item in osv_before_block.osv_items + osv_after_block.osv_items:
+            key = item.nomenclature.unique_code
+            if key not in temp_dict:
+                temp_dict[key] = item
+            else:
+                temp_dict[key].start_num += item.start_num
+                temp_dict[key].end_num += item.end_num
+
+        combined_osv.osv_items = list(temp_dict.values())
+        return combined_osv
+
+    def calculate_turnover_until_block(self):
+        block_date_str = self.__repo.settings.block_period if hasattr(self.__repo.settings,
+                                                                      'block_period') else "1900-01-01"
+        block_date = datetime.strptime(block_date_str, "%Y-%m-%d")
+        if self._cached_block_date and block_date > self._cached_block_date:
+            all_transactions = self.__repo.data.get(reposity.transaction_key(), [])
+            new_transactions = [
+                t for t in all_transactions
+                if self._cached_block_date < t.period <= block_date
+            ]
+            self._cached_turnover_before_block.fill_rows(new_transactions)
+            self._cached_block_date = block_date
+            return self._cached_turnover_before_block
+
+        #дата блокировки сдвинута влево
+        all_transactions = self.__repo.data.get(reposity.transaction_key(), [])
+        turnover_osv = osv_model()
+        nomenclatures = self.__repo.data.get(reposity.nomenclature_key(), [])
+        turnover_osv.fill_empty_osv(nomenclatures)
+
+        transactions_before_block = [
+            t for t in all_transactions if t.period <= block_date
+        ]
+        turnover_osv.fill_rows(transactions_before_block)
+        self._cached_turnover_before_block = turnover_osv
+        self._cached_block_date = block_date
+
+        return turnover_osv
 
     # Загрузить единицы измерений
     def __convert_ranges(self, data: dict) -> bool:
@@ -238,11 +326,13 @@ class start_service:
     """
     Основной метод для генерации эталонных данных
     """
-    def start(self):
-        self.file_name = "settings.json"
-        result = self.load()
-        if result == False:
-            raise operation_exception(f"Невозможно сформировать стартовый набор данных!\nОписание: {self.error_message}")
+
+    def load_settings(self):
+        settings = settings_manager()
+        settings.file_name = "settings.json"
+        if not settings.load():
+            raise operation_exception("Ошибка загрузки настроек.")
+        self.__repo.settings = settings.settings
 
     """
     Создание ОСВ
@@ -283,4 +373,30 @@ class start_service:
 
         return osv_instance
 
+
+def save_osv_to_file(self, osv_instance, file_path: str):
+    """
+    Сохраняет объект osv_model
+    """
+    osv_data = []
+    for item in osv_instance.osv_items:
+        osv_data.append({
+            "nomenclature": item.nomenclature.name if item.nomenclature else "",
+            "nomenclature_id": item.nomenclature.unique_code if item.nomenclature else "",
+            "start_num": item.start_num,
+            "end_num": item.end_num,
+            "range": item.range.name if item.range else "",
+            "range_id": item.range.unique_code if item.range else "",
+        })
+
+    result = {
+        "storage": osv_instance.storage.name if osv_instance.storage else "",
+        "storage_id": osv_instance.storage.unique_code if osv_instance.storage else "",
+        "start_date": osv_instance.start_date.strftime("%Y-%m-%d") if osv_instance.start_date else "",
+        "end_date": osv_instance.end_date.strftime("%Y-%m-%d") if osv_instance.end_date else "",
+        "osv_items": osv_data
+    }
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=4)
 
